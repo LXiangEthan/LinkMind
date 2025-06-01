@@ -1,9 +1,9 @@
 {
-	"id": "ob-smm",
-	"name": "Ob-SMM",
-	"version": "1.4.0",
+	"id": "linkmind",
+	"name": "LinkMind",
+	"version": "0.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "a mindmap plugin",
+	"description": "The markdown version of ob-smm",
 	"author": "Ethan Refrain",
 	"authorUrl": "https://github.com/LXiangEthan",
 	"fundingUrl": "https://door.ethanliang.top",
