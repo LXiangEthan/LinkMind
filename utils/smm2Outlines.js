@@ -302,6 +302,7 @@ export const smm2outlines = (mindMap,data,contentEl,document)=>{
 				nodeEl.querySelectorAll('.smm-dg-drop-indicator').forEach(el => {
 					el.style.display = 'none';
 				});
+				dropTarget = null
 			}
 		});
 		// 将节点添加到容器

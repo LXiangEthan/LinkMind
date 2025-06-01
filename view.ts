@@ -74,6 +74,7 @@ import Painter from 'simple-mind-map/src/plugins/Painter.js'
 import ExportPDF from "simple-mind-map/src/plugins/ExportPDF";
 // @ts-ignore
 import ExportXMind from 'simple-mind-map/src/plugins/ExportXMind'
+import {assembleMarkdownText, parseMarkdownText} from "./utils/metadataAndMarkdown";
 
 MindMap.usePlugin(ExportPDF)
 MindMap.usePlugin(ExportXMind)
@@ -118,6 +119,7 @@ export class SMMView extends TextFileView {
 	private refuse = false;
 	private file_lock = false;
 	private customIcons :any
+	private parseData: { linkdata: []; metadata: { path: string, content: string, tags: [] }; svgdata: string };
 	clear() {
 		this.data = '';
 		if (this.mindMap) {
@@ -133,7 +135,8 @@ export class SMMView extends TextFileView {
 	async onOpen() {
 		// eslint-disable-next-line no-constant-condition
 		this.registerEvent(this.app.workspace.on('active-leaf-change', async (leaf) => {
-			if (this.app.workspace.getActiveFile()?.extension == 'smm') {
+			// @ts-ignore
+			if (this.isLinkFile(this.app.workspace.getActiveFile())) {
 				// eslint-disable-next-line no-self-assign
 				this.currentFile = this.app.workspace.getActiveFile()
 				this.file_lock = false
@@ -162,10 +165,13 @@ export class SMMView extends TextFileView {
 	}
 
 	getViewData() {
-		return this.data;
+		return this.data
 	}
 
 	async setViewData(data: string) {
+		this.data = data
+		// @ts-ignore
+		this.parseData = parseMarkdownText(data)
 		this.contentEl.style.overflow = 'hidden'
 		if (this.file_lock) {
 			return false
@@ -174,7 +180,6 @@ export class SMMView extends TextFileView {
 			this.mindMap.destroy();
 			this.mindMap = null;
 		}
-		this.data = data
 		this.contentEl.empty()
 		this.contentEl.setAttribute('width', '100%')
 		this.contentEl.setAttribute('height', '100%')
@@ -186,7 +191,6 @@ export class SMMView extends TextFileView {
 			loadingImg.classList.add('smm-loading');
 			loadingImg.src = loading_gif
 		}
-		this.data = data;
 		this.contentEl.createEl('div', {attr: {class: 'smm-window-leaf'}, text: ''});
 		const roots = this.contentEl.querySelector(".smm-window-leaf")
 		// @ts-ignore
@@ -228,7 +232,7 @@ export class SMMView extends TextFileView {
 		this.smm_mindmap.appendChild(myMinimapborder);
 		myMinimapborder.style.display = 'none'
 		// @ts-ignore
-		const newData = JSON.parse(data)
+		const newData = JSON.parse(this.parseData.metadata.content)
 		// @ts-ignore
 		this.customIcons = await this.getIconize()
 		// @ts-ignore
@@ -291,14 +295,15 @@ export class SMMView extends TextFileView {
 			const current = this.currentFile
 			const content = await this.mindMap.getData(true)
 			const svgObj = await this.mindMap.export('svg', false, '')
-			content.svgData = svgObj
-			if (current instanceof TFile && current.extension == "smm") {
+			const svgData = svgObj
+			if (current instanceof TFile && this.isLinkFile(current)) {
 				try {
 					clearTimeout(this.saveTimer)
 					// @ts-ignore
 					this.saveTimer = setTimeout(() => {
+						const data = assembleMarkdownText({metadata:{path:current.path,tags:['linkMind'],content:JSON.stringify(content)},svgdata:svgData,linkdata:this.parseData.linkdata})
 						this.file_lock = true
-						this.app.vault.modify(current, JSON.stringify(content)).then(()=>{
+						this.app.vault.modify(current, data).then(()=>{
 							this.file_lock = false
 						})
 					}, 100)
@@ -312,14 +317,16 @@ export class SMMView extends TextFileView {
 		await lock.acquire('resource', async () => {
 		const current = this.currentFile
 		const content = await this.mindMap.getData(true)
-		content.svgData = JSON.parse(this.data).svgData
-		if (current instanceof TFile && current.extension == "smm") {
+		const svgData = this.parseData.svgdata
+		if (current instanceof TFile && this.isLinkFile(current)) {
 			try {
+
 				clearTimeout(this.saveTimer)
 				// @ts-ignore
 				this.saveTimer = setTimeout(() => {
+					const data = assembleMarkdownText({metadata:{path:current.path,tags:['linkMind'],content:JSON.stringify(content)},svgdata:svgData,linkdata:this.parseData.linkdata})
 						this.file_lock = true
-						this.app.vault.modify(current, JSON.stringify(content)).then(()=>{
+						this.app.vault.modify(current, data).then(()=>{
 							this.file_lock = false
 						})
 				}, 100)
@@ -709,12 +716,31 @@ export class SMMView extends TextFileView {
 							new Notice('插入内链失败',3000)
 							return
 						}
+						const linkText = this.app.fileManager.generateMarkdownLink(
+							// @ts-ignore
+							file,           // 目标文件
+							this.currentFile?.path || '', // 当前文件路径（用于相对路径）
+							'',                   // 可选：链接显示文本（留空则使用文件名）
+							file.name                 // 是否使用标题作为链接文本
+						);
+						// @ts-ignore
+						this.activeNodeList.forEach(node=>{
+							// @ts-ignore
+							const LT = node.getData('hyperlinkTitle')
+							// @ts-ignore
+							const index = this.parseData.linkdata.indexOf(LT);
+							if (index !== -1) {
+								this.parseData.linkdata.splice(index,1);
+							}
+						})
+						// @ts-ignore
+						this.parseData.linkdata.push(linkText)
 						// @ts-ignore
 						const localUrl = getInternalUrl(file);
 						// @ts-ignore
 						this.activeNodeList.forEach(node=>{
 							// @ts-ignore
-							node.setHyperlink(localUrl, item.children[2].innerText)
+							node.setHyperlink(localUrl, linkText)
 						})
 						// @ts-ignore
 						this.contentEl.querySelector('#smm-insertLink').style.display = 'none'
@@ -1059,6 +1085,14 @@ export class SMMView extends TextFileView {
 		}
 		// @ts-ignore
 		this.contentEl.querySelector('#smm-delete-hyperlink').onclick = ()=>{
+			// @ts-ignore
+			const LT = this.node.getData('hyperlinkTitle')
+			// @ts-ignore
+			const index = this.parseData.linkdata.indexOf(LT);
+			if (index !== -1) {
+				this.parseData.linkdata.splice(index,1);
+			}
+
 			this.node.setHyperlink('','')
 		}
 
@@ -1197,6 +1231,18 @@ export class SMMView extends TextFileView {
 		// this.mindMap.on('hide_text_edit',()=>{
 		// 	this.setSameWidth()
 		// })
+		// @ts-ignore
+		this.contentEl.querySelector('#smm-hightlight').onclick = ()=>{
+			for(const node of this.activeNodeList){
+				node.highlight()
+			}
+		}
+		// @ts-ignore
+		this.contentEl.querySelector('#smm-close-hightlight').onclick = ()=>{
+			for(const node of this.activeNodeList){
+				node.closeHighlight()
+			}
+		}
 	}
 	renderMinimap(){
 		// @ts-ignore
@@ -2307,6 +2353,18 @@ export class SMMView extends TextFileView {
 
 			input.click();
 		});
+	}
+	public isLinkFile(file:TFile){
+		if(!file){
+			return false;
+		}
+		if (file.extension === 'Link')
+			return true
+		const cache = this.app.metadataCache.getFileCache(file)
+		if(cache?.frontmatter?.tags?.contains('linkMind')){
+			return true
+		}
+		return false
 	}
 	setSameWidth(){
 

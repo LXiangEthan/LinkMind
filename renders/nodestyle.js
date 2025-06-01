@@ -52,6 +52,8 @@ export const smm_nodestyle = `
         <button class="smm-nodestyle-button smm-nodestyle-italic">I</button>
         <button class="smm-nodestyle-button smm-nodestyle-underline">U</button>
         <button class="smm-nodestyle-button" id="smm-clear-s">S</button>
+        <button class="smm-nodestyle-button" id="smm-hightlight">H</button>
+        <button class="smm-nodestyle-button" id="smm-close-hightlight">C</button>
       </div>
 		</div>
     </div>

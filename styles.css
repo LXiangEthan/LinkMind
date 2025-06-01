@@ -45,6 +45,9 @@ If your plugin does not need CSS, delete this file.
 	position: relative;
 	top: 0px;
 }
+.LinkMind-embed-Image{
+	max-height: 360px !important;
+}
 .ob-simple-mindMapContainer {
 	width: 100% !important;
 	height: 100% !important;
